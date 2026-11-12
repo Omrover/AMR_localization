@@ -68,6 +68,39 @@ static void test_omni(void)
 	}
 }
 
+static void test_mecanum(void)
+{
+	amr_omni_t k;
+	float w[4], vx, vy, wz;
+	const float r = 0.05f, lx = 0.15f, ly = 0.2f;
+
+	CHECK(amr_mecanum_init(&k, r, lx, ly));
+	/* Mismos valores que test_units.py (bridge Python). Orden fl, rl, rr, fr. */
+	amr_omni_inverse(&k, 1.0f, 0.0f, 0.0f, w);
+	for (int i = 0; i < 4; i++) {
+		CHECK(NEAR(w[i], 1.0 / r, 1e-4));
+	}
+	amr_omni_inverse(&k, 0.0f, 1.0f, 0.0f, w); /* izquierda: fl y rr hacia atrás */
+	CHECK(NEAR(w[0], -1.0 / r, 1e-4) && NEAR(w[1], 1.0 / r, 1e-4) &&
+	      NEAR(w[2], -1.0 / r, 1e-4) && NEAR(w[3], 1.0 / r, 1e-4));
+	amr_omni_inverse(&k, 0.0f, 0.0f, 1.0f, w); /* CCW: lado izquierdo hacia atrás */
+	CHECK(NEAR(w[0], -(lx + ly) / r, 1e-4) && NEAR(w[1], -(lx + ly) / r, 1e-4) &&
+	      NEAR(w[2], (lx + ly) / r, 1e-4) && NEAR(w[3], (lx + ly) / r, 1e-4));
+	CHECK(NEAR(k.L, lx + ly, 1e-6));
+	for (int n = 0; n < 200; n++) {
+		float v[3] = {(float)urand() * 2 - 1, (float)urand() * 2 - 1, (float)urand() * 4 - 2};
+		amr_omni_inverse(&k, v[0], v[1], v[2], w);
+		amr_omni_forward(&k, w, &vx, &vy, &wz);
+		CHECK(NEAR(vx, v[0], 1e-5) && NEAR(vy, v[1], 1e-5) && NEAR(wz, v[2], 1e-5));
+		CHECK(amr_omni_residual(&k, w) < 1e-5f);
+	}
+	amr_omni_inverse(&k, 0.5f, 0.0f, 0.0f, w);
+	w[2] = 0.0f; /* rr sin tracción */
+	CHECK(amr_omni_residual(&k, w) > 0.02f);
+	CHECK(!amr_mecanum_init(&k, 0.05f, 0.0f, 0.2f));
+	CHECK(!amr_mecanum_init(&k, 0.0f, 0.15f, 0.2f));
+}
+
 static void test_utils(void)
 {
 	CHECK(NEAR(amr_wrap_pi(3.5f), 3.5 - 2 * M_PI, 1e-5));
@@ -231,6 +264,7 @@ static void test_variances_positive(void)
 int main(void)
 {
 	test_omni();
+	test_mecanum();
 	test_utils();
 	test_ekf_fusion();
 	test_reset_and_offset();

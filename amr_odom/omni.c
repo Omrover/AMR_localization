@@ -2,23 +2,13 @@
 
 #include <math.h>
 
-bool amr_omni_init(amr_omni_t *k, float wheel_radius, float center_distance,
-		   const float angles_rad[AMR_OMNI_WHEELS])
+/* Pseudo-inversa Jp = (J^T J)^-1 J^T a partir de k->J. false si es singular. */
+static bool finish(amr_omni_t *k)
 {
 	double a[3][3] = {{0}};
 	double inv[3][3];
 	double det;
 
-	if (!(wheel_radius > 0.0f) || !(center_distance > 0.0f)) {
-		return false;
-	}
-	k->r = wheel_radius;
-	k->L = center_distance;
-	for (int i = 0; i < AMR_OMNI_WHEELS; i++) {
-		k->J[i][0] = -sinf(angles_rad[i]);
-		k->J[i][1] = cosf(angles_rad[i]);
-		k->J[i][2] = center_distance;
-	}
 	/* A = J^T J (3x3) e inversa por cofactores, en double. */
 	for (int r = 0; r < 3; r++) {
 		for (int c = 0; c < 3; c++) {
@@ -52,6 +42,45 @@ bool amr_omni_init(amr_omni_t *k, float wheel_radius, float center_distance,
 		}
 	}
 	return true;
+}
+
+bool amr_omni_init(amr_omni_t *k, float wheel_radius, float center_distance,
+		   const float angles_rad[AMR_OMNI_WHEELS])
+{
+	if (!(wheel_radius > 0.0f) || !(center_distance > 0.0f)) {
+		return false;
+	}
+	k->r = wheel_radius;
+	k->L = center_distance;
+	for (int i = 0; i < AMR_OMNI_WHEELS; i++) {
+		k->J[i][0] = -sinf(angles_rad[i]);
+		k->J[i][1] = cosf(angles_rad[i]);
+		k->J[i][2] = center_distance;
+	}
+	return finish(k);
+}
+
+bool amr_mecanum_init(amr_omni_t *k, float wheel_radius, float half_length, float half_width)
+{
+	/* Posición de cada rueda en el orden del contrato: fl, rl, rr, fr. */
+	static const float sx[AMR_OMNI_WHEELS] = {1.0f, -1.0f, -1.0f, 1.0f};
+	static const float sy[AMR_OMNI_WHEELS] = {1.0f, 1.0f, -1.0f, -1.0f};
+
+	if (!(wheel_radius > 0.0f) || !(half_length > 0.0f) || !(half_width > 0.0f)) {
+		return false;
+	}
+	k->r = wheel_radius;
+	k->L = half_length + half_width;
+	for (int i = 0; i < AMR_OMNI_WHEELS; i++) {
+		/* Rodillo de contacto a 45 deg con pendiente t = -sx*sy (rodillos en X
+		 * vistos desde arriba): w r = vx + t vy + (t x - y) wz. */
+		float t = -sx[i] * sy[i];
+
+		k->J[i][0] = 1.0f;
+		k->J[i][1] = t;
+		k->J[i][2] = t * sx[i] * half_length - sy[i] * half_width;
+	}
+	return finish(k);
 }
 
 void amr_omni_inverse(const amr_omni_t *k, float vx, float vy, float wz,

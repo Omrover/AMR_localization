@@ -1,11 +1,17 @@
 /*
- * Cinemática de la base omnidireccional de 4 ruedas (configuración X a 45 deg).
- * Misma convención que AMR_LLC/ros2/amr_mqtt_bridge/amr_mqtt_bridge/omni.py:
+ * Cinemática de bases holonómicas de 4 ruedas. Misma convención que
+ * AMR_LLC/ros2/amr_mqtt_bridge/amr_mqtt_bridge/omni.py.
  *
- *   rueda i en (L cos a_i, L sin a_i), eje radial, tracción tangencial
- *   u_i = (-sin a_i, cos a_i):    v_i = -sin(a_i) vx + cos(a_i) vy + L wz,  w_i = v_i / r
+ * Mecanum (el robot real): ruedas rectas en (+-lx, +-ly), rodillos a 45 deg en X
+ * vistos desde arriba, w_i positiva = la rueda rueda hacia +x:
  *
- * Orden de ruedas del contrato: fl (45), rl (135), rr (225), fr (315).
+ *   fl:  w r = vx - vy - (lx + ly) wz        rr:  w r = vx - vy + (lx + ly) wz
+ *   rl:  w r = vx + vy - (lx + ly) wz        fr:  w r = vx + vy + (lx + ly) wz
+ *
+ * Omni en X (amr_omni_init): rueda i en (L cos a_i, L sin a_i), eje radial,
+ * tracción tangencial: v_i = -sin(a_i) vx + cos(a_i) vy + L wz,  w_i = v_i / r.
+ *
+ * Orden de ruedas del contrato: fl, rl, rr, fr (ruedas 1, 2, 3, 4).
  * C99 portable, sin RTOS.
  */
 #ifndef AMR_OMNI_H
@@ -21,7 +27,7 @@ extern "C" {
 
 typedef struct {
 	float r;                       /* radio de rueda [m] */
-	float L;                       /* centro -> rueda [m] */
+	float L;                       /* brazo de palanca de wz [m] */
 	float J[AMR_OMNI_WHEELS][3];   /* v_superficie = J [vx vy wz] */
 	float Jp[3][AMR_OMNI_WHEELS];  /* pseudo-inversa (J^T J)^-1 J^T */
 } amr_omni_t;
@@ -30,6 +36,10 @@ typedef struct {
  * configuración es singular o los parámetros no son positivos. */
 bool amr_omni_init(amr_omni_t *k, float wheel_radius, float center_distance,
 		   const float angles_rad[AMR_OMNI_WHEELS]);
+
+/* Mecanum con ruedas en (+-half_length, +-half_width). false si algún
+ * parámetro no es positivo. */
+bool amr_mecanum_init(amr_omni_t *k, float wheel_radius, float half_length, float half_width);
 
 /* Velocidad del robot (base_footprint) -> velocidad angular de cada rueda [rad/s]. */
 void amr_omni_inverse(const amr_omni_t *k, float vx, float vy, float wz,
